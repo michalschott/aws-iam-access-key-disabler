@@ -6,6 +6,9 @@
       "matchPackageNames": ["aws-sdk-go"],
       "schedule": ["after 9pm on sunday"]
     }
+  ],
+  "schedule": [
+    "before 3am on Monday"
   ]
 }
 
