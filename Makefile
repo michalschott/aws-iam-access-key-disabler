@@ -7,7 +7,7 @@ ARTEFACTS_DIR=artefacts
 
 .PHONY: staticcheck
 staticcheck:
-	docker run --rm -v "$(PWD)":/code -it $(GO_VERSION) sh -c "\
+	docker run --rm -v "$(PWD)":/code $(GO_VERSION) sh -c "\
 		go get honnef.co/go/tools/cmd/staticcheck > /dev/null && \
 		cd /code && \
 		echo \"\n** Running static analyze\n\" && \
@@ -16,7 +16,7 @@ staticcheck:
 
 .PHONY: vet
 vet:
-	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go -it $(GO_VERSION) sh -c "\
+	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go $(GO_VERSION) sh -c "\
 		cd /code && \
 		echo \"\n** Running vet\n\" && \
 		go vet \
@@ -24,7 +24,7 @@ vet:
 
 .PHONY: build
 build: vet staticcheck
-	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go -it $(GO_VERSION) sh -c "\
+	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go $(GO_VERSION) sh -c "\
 		apt-get update && apt-get install -y upx && \
 		cd /code && \
 		echo \"\n** Building ${OUTPUT}\n\" && \
@@ -37,7 +37,7 @@ install: vet staticcheck
 
 .PHONY: clean
 clean:
-	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go -it $(GO_VERSION) sh -c "\
+	docker run --rm -v "$(PWD)":/code -v "$(PWD)"/.cache:/go $(GO_VERSION) sh -c "\
 		rm -rf /go/* /code/artefacts/* \
 	"
 
