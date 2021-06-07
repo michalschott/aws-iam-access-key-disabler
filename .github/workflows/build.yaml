@@ -1,0 +1,19 @@
+
+name: build
+on:
+  pull_request:
+jobs:
+  build-standalone:
+    name: build-standalone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: make
+        run: make
+  build-lambda:
+    name: build-lambda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: make
+        run: make
