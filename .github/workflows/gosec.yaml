@@ -1,10 +1,5 @@
 name: Run Gosec
 on:
-  push:
-    tags:
-      - v*
-    branches:
-      - master
   pull_request:
 jobs:
   tests:
