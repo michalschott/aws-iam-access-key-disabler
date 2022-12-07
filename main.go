@@ -106,7 +106,7 @@ func HandleRequest(ctx context.Context) (int, error) {
 	sess, err := session.NewSession()
 
 	if err != nil {
-		log.Fatal("Error", err)
+		return 1, err
 	}
 
 	svc := iam.New(sess)
@@ -114,7 +114,7 @@ func HandleRequest(ctx context.Context) (int, error) {
 	result, err := svc.ListUsers(&iam.ListUsersInput{})
 
 	if err != nil {
-		log.Fatal("Error", err)
+		return 1, err
 	}
 
 	for _, user := range result.Users {
@@ -131,7 +131,7 @@ func HandleRequest(ctx context.Context) (int, error) {
 
 		err = parseUser(svc, *user.UserName, config)
 		if err != nil {
-			log.Error(err)
+			return 1, err
 		}
 	}
 
@@ -140,11 +140,16 @@ func HandleRequest(ctx context.Context) (int, error) {
 
 func main() {
 	if l.IsLambda() {
-		log.Info("Running in lambda")
 		lambda.Start(HandleRequest)
 	} else {
-		log.Info("Running as standalone")
-		ctx := context.Background()
-		HandleRequest(ctx)
+		var ret int
+		var err error
+
+		ret, err = HandleRequest(context.Background())
+		if err != nil {
+			log.Error(err)
+		}
+
+		os.Exit(ret)
 	}
 }
