@@ -1,96 +1,97 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
+
 	log "github.com/sirupsen/logrus"
+
+	e "github.com/michalschott/aws-iam-access-key-disabler/pkg/env"
+	i "github.com/michalschott/aws-iam-access-key-disabler/pkg/iam"
+	l "github.com/michalschott/aws-iam-access-key-disabler/pkg/lambda"
 )
 
 type Config struct {
 	now               time.Time
 	lowThresholdDays  int
 	highThresholdDays int
-	dryRun            int
+	dryRun            bool
 }
 
-func parseKey(svc *iam.IAM, config Config, key *iam.AccessKeyMetadata) {
+const (
+	msgKeyDisabled         = "key disabled"
+	msgKeyToBeDisabled     = "key to be disabled"
+	msgKeyToBeDisabledSoon = "days left to disable key"
+)
+
+func parseKey(svc *iam.IAM, config Config, key *iam.AccessKeyMetadata) error {
 	disableKey := false
-	keyAgeInDays := config.now.Sub(*key.CreateDate).Hours() / 24
+	keyAgeInDays := i.GetAccessKeyAgeInDays(key)
 	if int(keyAgeInDays) >= config.highThresholdDays {
 		log.WithFields(log.Fields{
 			"Username":    *key.UserName,
 			"AccessKeyId": *key.AccessKeyId,
-			"Threshold":   strconv.Itoa(config.highThresholdDays) + " days",
-		}).Info("Access key age above high threshold. Disabling it.")
+		}).Info(msgKeyToBeDisabled)
 		disableKey = true
 	} else if int(keyAgeInDays) < config.highThresholdDays && int(keyAgeInDays) >= config.lowThresholdDays {
 		log.WithFields(log.Fields{
 			"Username":    *key.UserName,
 			"AccessKeyId": *key.AccessKeyId,
-			"Threshold":   strconv.Itoa(config.lowThresholdDays) + " days",
-		}).Info("Access key age above low threshold.")
+		}).Info(keyAgeInDays-config.lowThresholdDays, " ", msgKeyToBeDisabledSoon)
 	}
 
-	if disableKey {
-		if config.dryRun == 0 {
-			_, err := svc.UpdateAccessKey(&iam.UpdateAccessKeyInput{
-				AccessKeyId: aws.String(*key.AccessKeyId),
-				Status:      aws.String(iam.StatusTypeInactive),
-				UserName:    aws.String(*key.UserName),
-			})
-
-			if err != nil {
-				log.Fatal("Error", err)
-			}
+	if disableKey && !config.dryRun {
+		err := i.DisableAccessKey(svc, key)
+		if err != nil {
+			return err
 		}
+
 		log.WithFields(log.Fields{
 			"Username":    *key.UserName,
 			"AccessKeyId": *key.AccessKeyId,
-		}).Debug("Access key has been disabled.")
+		}).Info(msgKeyDisabled)
 	}
+
+	return nil
 }
 
-func parseUser(svc *iam.IAM, username string, config Config, wg *sync.WaitGroup) {
-	defer wg.Done()
-	result, err := svc.ListAccessKeys(&iam.ListAccessKeysInput{
-		UserName: aws.String(username),
-	})
-
+func parseUser(svc *iam.IAM, username string, config Config) error {
+	keys, err := i.GetActiveAccessKeys(svc, username)
 	if err != nil {
-		log.Fatal("Error", err)
+		return err
 	}
 
-	for _, key := range result.AccessKeyMetadata {
-		if *key.Status == "Active" {
-			parseKey(svc, config, key)
-		} else {
-			log.WithFields(log.Fields{
-				"Username":    username,
-				"AccessKeyId": *key.AccessKeyId,
-			}).Debug("Key inactive, skipping.")
+	for _, key := range keys {
+		err = parseKey(svc, config, key)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
 }
 
-func main() {
+func HandleRequest(ctx context.Context) (int, error) {
+	var lowThresholdDays = flag.Int("l", e.LookupEnvOrInt("LOWTHRESHOLDDAYS", 90), "Show warning for keys older than X days")
+	var highThreshooldDays = flag.Int("h", e.LookupEnvOrInt("HIGHTHRESHOLDDAYS", 180), "Disable keys older than X days")
+	var dryRun = flag.Bool("dryrun", e.LookupEnvOrBool("DRYRUN", true), "Dry run")
+	var debug = flag.Int("debug", e.LookupEnvOrInt("DEBUG", 0), "Debug")
+	var whiteList = flag.String("w", e.LookupEnvOrString("WHITELIST", ""), "Comma separated list of users to skip.")
+	flag.Parse()
+
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetOutput(os.Stdout)
-	//log.SetLevel(log.DebugLevel)
-
-	var lowThresholdDays = flag.Int("l", LookupEnvOrInt("LOWTHRESHOLDDAYS", 90), "Show warning for keys older than X days")
-	var highThreshooldDays = flag.Int("h", LookupEnvOrInt("HIGHTHRESHOLDDAYS", 180), "Disable keys older than X days")
-	var dryRun = flag.Int("dryrun", LookupEnvOrInt("DRYRUN", 1), "Dry run")
-	var whiteList = flag.String("w", LookupEnvOrString("WHITELIST", ""), "Comma separated list of users to skip.")
-	flag.Parse()
+	if *debug == 1 {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	config := Config{time.Now().UTC(), *lowThresholdDays, *highThreshooldDays, *dryRun}
 	whitelistedUsers := strings.Split(*whiteList, ",")
@@ -98,7 +99,7 @@ func main() {
 	sort.Strings(whitelistedUsers)
 	log.Info("Ignored users: ", whitelistedUsers)
 
-	if *dryRun == 1 {
+	if *dryRun {
 		log.Info("Running in dry run mode.")
 	}
 
@@ -116,7 +117,6 @@ func main() {
 		log.Fatal("Error", err)
 	}
 
-	var wg sync.WaitGroup
 	for _, user := range result.Users {
 		if user == nil {
 			continue
@@ -129,26 +129,22 @@ func main() {
 			continue
 		}
 
-		wg.Add(1)
-		go parseUser(svc, *user.UserName, config, &wg)
-	}
-	wg.Wait()
-}
-
-func LookupEnvOrString(key string, defaultVal string) string {
-	if val, ok := os.LookupEnv(key); ok {
-		return val
-	}
-	return defaultVal
-}
-
-func LookupEnvOrInt(key string, defaultVal int) int {
-	if val, ok := os.LookupEnv(key); ok {
-		v, err := strconv.Atoi(val)
+		err = parseUser(svc, *user.UserName, config)
 		if err != nil {
-			log.Fatalf("LookupEnvOrInt[%s]: %v", key, err)
+			log.Error(err)
 		}
-		return v
 	}
-	return defaultVal
+
+	return 0, nil
+}
+
+func main() {
+	if l.IsLambda() {
+		log.Info("Running in lambda")
+		lambda.Start(HandleRequest)
+	} else {
+		log.Info("Running as standalone")
+		ctx := context.Background()
+		HandleRequest(ctx)
+	}
 }

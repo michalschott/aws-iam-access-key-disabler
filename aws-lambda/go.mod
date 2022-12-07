@@ -1,9 +1,0 @@
-module github.com/michalschott/aws-iam-access-key-disabler/aws-lambda
-
-go 1.13
-
-require (
-	github.com/aws/aws-lambda-go v1.28.0
-	github.com/aws/aws-sdk-go v1.43.7
-	github.com/sirupsen/logrus v1.8.1
-)
