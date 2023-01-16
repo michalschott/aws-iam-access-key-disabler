@@ -3,7 +3,7 @@ module github.com/michalschott/aws-iam-access-key-disabler
 go 1.19
 
 require (
-	github.com/aws/aws-lambda-go v1.36.1
+	github.com/aws/aws-lambda-go v1.37.0
 	github.com/aws/aws-sdk-go v1.44.180
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/env v0.1.0
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/iam v0.1.0
