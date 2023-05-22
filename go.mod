@@ -8,7 +8,7 @@ require (
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/env v0.1.0
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/iam v0.1.0
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/lambda v0.1.0
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.2
 )
 
 require (
