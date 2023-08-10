@@ -2,20 +2,18 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
 
 	log "github.com/sirupsen/logrus"
 
-	e "github.com/michalschott/aws-iam-access-key-disabler/pkg/env"
-	i "github.com/michalschott/aws-iam-access-key-disabler/pkg/iam"
 	l "github.com/michalschott/aws-iam-access-key-disabler/pkg/lambda"
 )
 
@@ -28,64 +26,17 @@ type Config struct {
 
 const (
 	msgKeyDisabled         = "key disabled"
-	msgKeyToBeDisabled     = "key to be disabled"
-	msgKeyToBeDisabledSoon = "days left to disable key"
+	msgKeyToBeDisabled     = "days beyond high threshold, key to be disabled"
+	msgKeyToBeDisabledSoon = "days beyond low threshold, key will be disabled soon"
 )
 
-func parseKey(svc *iam.IAM, config Config, key *iam.AccessKeyMetadata) error {
-	disableKey := false
-	keyAgeInDays := i.GetAccessKeyAgeInDays(key)
-	if int(keyAgeInDays) >= config.highThresholdDays {
-		log.WithFields(log.Fields{
-			"Username":    *key.UserName,
-			"AccessKeyId": *key.AccessKeyId,
-		}).Info(msgKeyToBeDisabled)
-		disableKey = true
-	} else if int(keyAgeInDays) < config.highThresholdDays && int(keyAgeInDays) >= config.lowThresholdDays {
-		log.WithFields(log.Fields{
-			"Username":    *key.UserName,
-			"AccessKeyId": *key.AccessKeyId,
-		}).Info(keyAgeInDays-config.lowThresholdDays, " ", msgKeyToBeDisabledSoon)
-	}
-
-	if disableKey && !config.dryRun {
-		err := i.DisableAccessKey(svc, key)
-		if err != nil {
-			return err
-		}
-
-		log.WithFields(log.Fields{
-			"Username":    *key.UserName,
-			"AccessKeyId": *key.AccessKeyId,
-		}).Info(msgKeyDisabled)
-	}
-
-	return nil
-}
-
-func parseUser(svc *iam.IAM, username string, config Config) error {
-	keys, err := i.GetActiveAccessKeys(svc, username)
-	if err != nil {
-		return err
-	}
-
-	for _, key := range keys {
-		err = parseKey(svc, config, key)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func HandleRequest(ctx context.Context) (int, error) {
-	var lowThresholdDays = flag.Int("l", e.LookupEnvOrInt("LOWTHRESHOLDDAYS", 90), "Show warning for keys older than X days")
-	var highThreshooldDays = flag.Int("h", e.LookupEnvOrInt("HIGHTHRESHOLDDAYS", 180), "Disable keys older than X days")
-	var dryRun = flag.Bool("dryrun", e.LookupEnvOrBool("DRYRUN", true), "Dry run")
-	var debug = flag.Int("debug", e.LookupEnvOrInt("DEBUG", 0), "Debug")
-	var whiteList = flag.String("w", e.LookupEnvOrString("WHITELIST", ""), "Comma separated list of users to skip.")
-	flag.Parse()
+	var lowThresholdDays = kingpin.Flag("lowTresholdDays", "Show warning for keys older than X days").Default("90").Envar("LOWTHRESHOLDDAYS").Short('l').Int()
+	var highThresholdDays = kingpin.Flag("highTresholdDays", "Disable keys older than X days").Default("180").Envar("HIGHTHRESHOLDDAYS").Short('h').Int()
+	var dryRun = kingpin.Flag("dryrun", "").Default("true").Envar("DRYRUN").Bool()
+	var debug = kingpin.Flag("debug", "").Default("0").Envar("DEBUG").Int()
+	var whiteList = kingpin.Flag("whitelist", "Comma separated list of users to skip").Default("").Envar("WHITELIST").Short('w').String()
+	kingpin.Parse()
 
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetOutput(os.Stdout)
@@ -93,7 +44,7 @@ func HandleRequest(ctx context.Context) (int, error) {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	config := Config{time.Now().UTC(), *lowThresholdDays, *highThreshooldDays, *dryRun}
+	config := Config{time.Now().UTC(), *lowThresholdDays, *highThresholdDays, *dryRun}
 	whitelistedUsers := strings.Split(*whiteList, ",")
 
 	sort.Strings(whitelistedUsers)

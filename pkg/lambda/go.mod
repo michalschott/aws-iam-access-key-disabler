@@ -1,3 +1,3 @@
 module github.com/michalschott/aws-iam-access-key-disabler/pkg/lambda
 
-go 1.19
+go 1.20
