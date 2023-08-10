@@ -1,10 +1,10 @@
 terraform {
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
+      source = "hashicorp/aws"
     }
     archive = {
-      source  = "hashicorp/archive"
+      source = "hashicorp/archive"
     }
   }
 }
@@ -50,7 +50,7 @@ data "archive_file" "this" {
 resource "aws_lambda_function" "this" {
   filename         = data.archive_file.this.output_path
   function_name    = "aws-iam-access-key-disabler"
-  role             =  aws_iam_role.this.arn
+  role             = aws_iam_role.this.arn
   handler          = "aws-iam-access-key-disabler"
   source_code_hash = filebase64sha256(data.archive_file.this.output_path)
   runtime          = "go1.x"
@@ -145,7 +145,7 @@ data "aws_iam_policy_document" "this" {
 resource "aws_cloudwatch_event_rule" "this" {
   name                = "aws-iam-access-key-disabler"
   description         = "Event rule for scheduling aws-iam-access-key-disabler lambda function."
-  schedule_expression = "${var.schedule}"
+  schedule_expression = var.schedule
 }
 
 resource "aws_cloudwatch_event_target" "this" {
