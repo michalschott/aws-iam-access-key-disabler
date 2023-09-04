@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/alecthomas/kingpin/v2 v2.3.2
 	github.com/aws/aws-lambda-go v1.41.0
-	github.com/aws/aws-sdk-go v1.44.332
+	github.com/aws/aws-sdk-go v1.45.2
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/iam v0.1.0
 	github.com/michalschott/aws-iam-access-key-disabler/pkg/lambda v0.1.0
 	github.com/sirupsen/logrus v1.9.3
